@@ -49,28 +49,56 @@ def Go():
   #Save vars
   row = 0
   top_group_len = 0
-
+  UsernameList_track = []
+  DuplicateUsername_count = 0
+  DuplicateUsername_list = []
+  number_of_questions = 6
+  memberinputerror_count = 0
+  memberinputerror_list = []
   #find the total rows of the spreadsheet
   max_rows = Username.shape[0]
   max_rows_db = db.shape[0]
   while row != max_rows:
     #save the username by each row
     UsernameInput = (UsernameList[row])[0]
-    ProcessingUserOutput = ("Processing Username",UsernameInput)
+    ProcessingUserOutput = str("Processing Username: "+UsernameInput)
     print(ProcessingUserOutput)
     GUIOutput.insert(END,"")
     GUIOutput.insert(END,ProcessingUserOutput)
 
-    if "@oregonstate.edu" in UsernameInput:
-      UsernameInput.replace("@oregonstate.edu","")
 
+    try:
+      #return row that matches username
+      matched_user_group = db.loc[db['login_id']== (UsernameInput),'group_name']
+      group_name = ((matched_user_group.values).tolist())[0]
+      matched_user_group = db.loc[db['login_id']== (UsernameInput),'name']
+      user_fullname = ((matched_user_group.values).tolist())[0]
+    except:
+      #if name does not exist break out of loop
+      InputError = str("Error..."+UsernameInput+" does not exist in the database...")
+      print(InputError)
+      GUIOutput.insert(END,InputError)
+      break
     
-    matched_user_group = db.loc[db['login_id']== (UsernameInput+"@oregonstate.edu"),'group_name']
-    group_name = ((matched_user_group.values).tolist())[0]
+    #add Username input to list to track for duplicates
+    
+    if UsernameInput in UsernameList_track:
+        DuplicateUsername = str("Error..."+UsernameInput+" has a duplicate input. Ignoring data...")
+        print(DuplicateUsername)
+        GUIOutput.insert(END,DuplicateUsername)
+        DuplicateUsername_list.append(UsernameInput)
+        DuplicateUsername_count += 1
+        row += 1
+        continue
+    UsernameList_track.append(UsernameInput)
+
+
+
+
     #return all the people with the same group name
     matched_group = db.loc[db['group_name']== group_name]
     matched_group_users = matched_group['name'].values
-    group_name_output = ("Group Name:"+str(group_name))
+    group_name_output = str("Group Name:"+str(group_name))
     print(group_name_output)
     GUIOutput.insert(END,group_name_output)
     #Create new columns for output db and update with more columns if a group has more members than previous top
@@ -82,33 +110,42 @@ def Go():
           db_col_count = len(output_db.columns)
           placeholder_list = list(numpy.repeat([nan], max_rows_db))
           output_db.loc[:,'Group Member #'+str(db_col_count-1)+" Score"] = placeholder_list
+
     #track the current highest number of group members
     top_group_len = len(matched_group_users)
 
     #Assign self score to output db
-    matched_username = GoogleForms.loc[GoogleForms['ONID username']== (UsernameInput)]
+    matched_username = GoogleForms.loc[GoogleForms.iloc[:,1]== (UsernameInput)]
     self_scores_list = matched_username.iloc[:,2:8]
     self_scores_total = self_scores_list.values.sum()
-    index_num = db[db['login_id'] == (UsernameInput+"@oregonstate.edu")].index[0]
+    index_num = db[db['login_id'] == (UsernameInput)].index[0]
     output_db.at[index_num,"Self Evaluation Score"] = float(self_scores_total)
     
+    
+
     for member_no in range(len(matched_group_users)):
       if member_no !=0:
         #Assign scores to group members
-        member_score = matched_username.iloc[:,((member_no-1)*7+9):((member_no-1)*7+15)]
+        member_score = matched_username.iloc[:,((member_no-1) * (number_of_questions+1) + 9):((member_no-1) * (number_of_questions+1) + (9+number_of_questions))]
         total_member_score = member_score.values.sum()
 
-        #make this to a list
-        #TO DO: Remove self user from list
+        #make this to a list and remove the user from the member list
         member_names_db_list = matched_group_users.tolist()
-        
-        #member_names_db_list_stripped =  [str(comma.replace(",","") for comma in list(member_names_db_list))]
-        #member_quantity = [str(i) for i in range(len(matched_group_users))]
-        #member_names_db_list_stripped = [word.replace(',', '') for word in member_quantity]
+        member_names_db_list.remove(user_fullname)
+        print(member_names_db_list)
 
         #grab the input for username by each column
         member_names_inputs = matched_username.iloc[:,((member_no-1)*7+8)]
         member_names_input = member_names_inputs.tolist()[0]
+        
+        #Detect if number of member input < group members. If true, print error and break out of loop
+        if member_names_inputs.isnull().values.any():
+            memberinputerror = str(UsernameInput+ " did not evaluate one or more of their members.")
+            print(memberinputerror)
+            GUIOutput.insert(END,memberinputerror)
+            memberinputerror_list.append(UsernameInput)
+            memberinputerror_count += 1
+            break
 
         #insert into output_db if name matches
         matching_member = (process.extract(str(member_names_input),member_names_db_list,limit=1))[0][0]
@@ -122,32 +159,55 @@ def Go():
         while True:
           #assign member score if the column value is empty, else check next column
           if str(matched_member.iloc[0,column_index]) == "nan":
+            #Output member scores
             output_db.iat[member_index,column_index] = total_member_score
             break
           else:
             column_index += 1
             continue
         
-        ProcessedMemberOutput = ("Processed Member"," Input_name:",member_names_input,"Full_name",matching_member,"Score:",total_member_score)  
+        ProcessedMemberOutput = str("Processed Member..."+" Input_name:"+member_names_input+" | Full_name:"+matching_member+" | Score:"+str(total_member_score))       
         print(ProcessedMemberOutput)
         GUIOutput.insert(END,ProcessedMemberOutput)
       else:
         continue
 
-
-    ProcessedUser = ("Processed Username",UsernameInput)
+    #print current username in process      
+    ProcessedUser = str("Processed Username: "+UsernameInput)
     print(ProcessedUser)
     GUIOutput.insert(END,ProcessedUser)
     row += 1
-  
+    continue
+
   #Add all scores and add new column with totals
   score_averages= output_db.mean(axis=1,numeric_only=True)
   output_db["Average Score"] = score_averages
 
+  #Copy comments column from google forms into output db
+  comments_col = GoogleForms.iloc[:,-1]
+  output_db = output_db.join(comments_col)   
+
+  # if there are duplicate username inputs raise error at end
+  if DuplicateUsername_count > 0:
+    DuplicateUsername_count_str = ("Warning...There are "+str(DuplicateUsername_count)+" duplicate input(s):")
+    print(DuplicateUsername_count_str)
+    print(DuplicateUsername_list)
+    GUIOutput.insert(END,"")
+    GUIOutput.insert(END,DuplicateUsername_count_str)
+    GUIOutput.insert(END,DuplicateUsername_list)
+
+  #if a user did not evaluate all members, raise error at end  
+  if memberinputerror_count > 0:
+    memberinputerror_count_str = ("Warning...There are "+str(memberinputerror_count)+" user(s) that did not evaluate all their members:")
+    print(memberinputerror_count_str)
+    print(memberinputerror_list)
+    GUIOutput.insert(END,"")
+    GUIOutput.insert(END,memberinputerror_count_str)
+    GUIOutput.insert(END,memberinputerror_list)
 
   print("Processing Complete...")
   GUIOutput.insert(END,"")
-  GUIOutput.insert(END,"Processing Complete")
+  GUIOutput.insert(END,"Processing Complete...")
   #Output to xlsx in path
   try:
     output_db.to_excel(Output_path+'\\Peer_Eval_output.xlsx')
@@ -199,7 +259,7 @@ root.resizable(False,False)
 # all widgets will be here
 Label1 = Label(root,text="Project Groups.csv path:")
 ft = tkFont.Font(family='MS Sans',size=10)
-#Label1["font"] = ft
+Label1["font"] = ft
 Label1.place(x=30,y=10)
 
 Path_db = Listbox(root)
