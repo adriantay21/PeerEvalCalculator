@@ -1,0 +1,6 @@
+Version 1.1 Changes:
+- Minor code improvements
+- Detect and raise error for bad/duplicate input
+- Detect and raise error if user does not evaluate all members
+- Changed input requirements so that user is not required to input their username. Username (email address) is automatically collected. 
+- Added feature to include comments
