@@ -5,7 +5,6 @@ from fileinput import close
 from multiprocessing.resource_sharer import stop
 from pathlib import Path
 from tkinter import *
-from ttkthemes import themed_tk as tk
 import tkinter.font as tkFont
 from tkinter import filedialog
 from asyncio.windows_events import NULL
@@ -13,15 +12,15 @@ from cmath import nan
 from ftplib import all_errors
 from re import M
 from tokenize import group
-from openpyxl import workbook
-import pandas as pd
+import pandas
 import csv
 import os
 import numpy
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 import Levenshtein
-pd.options.mode.chained_assignment = None  # default='warn'
+import openpyxl
+pandas.options.mode.chained_assignment = None  # default='warn'
 
 
 #Button commands
@@ -29,19 +28,18 @@ def Go():
   
   #Clear Output listbox
   GUIOutput.delete(0,END)
-
   Inputdb_path = Path_db.get(0)
   GoogleForms_path = Path_GF.get(0)
   Output_path = Path_Output.get(0)
 
   #Open googleforms.csv and save to a variable
-  GoogleForms = pd.read_csv(GoogleForms_path,header=0)
+  GoogleForms = pandas.read_csv(GoogleForms_path,header=0)
   #Open GoogleForms.csv and only read usernames
-  Username = pd.read_csv(GoogleForms_path,header=0,usecols=[1])
+  Username = pandas.read_csv(GoogleForms_path,header=0,usecols=[1])
   UsernameList = (Username.values).tolist()
 
   #Open Student Database
-  db = pd.read_csv(Inputdb_path,header=0)
+  db = pandas.read_csv(Inputdb_path,header=0)
 
   #Create an output database
   output_db = db[['name','login_id']]
@@ -52,12 +50,19 @@ def Go():
   UsernameList_track = []
   DuplicateUsername_count = 0
   DuplicateUsername_list = []
-  number_of_questions = 6
+  #assign no of questions based on UI input
+  number_of_questions = int(clicked1.get())
   memberinputerror_count = 0
   memberinputerror_list = []
+  low_match_count = 0
+  low_match_list = []
+  low_match_TF = FALSE
   #find the total rows of the spreadsheet
   max_rows = Username.shape[0]
   max_rows_db = db.shape[0]
+  #make a list to store comments
+  comment_index_list = []
+  comment_list = []
   while row != max_rows:
     #save the username by each row
     UsernameInput = (UsernameList[row])[0]
@@ -65,7 +70,6 @@ def Go():
     print(ProcessingUserOutput)
     GUIOutput.insert(END,"")
     GUIOutput.insert(END,ProcessingUserOutput)
-
 
     try:
       #return row that matches username
@@ -110,32 +114,31 @@ def Go():
           db_col_count = len(output_db.columns)
           placeholder_list = list(numpy.repeat([nan], max_rows_db))
           output_db.loc[:,'Group Member #'+str(db_col_count-1)+" Score"] = placeholder_list
-
-    #track the current highest number of group members
-    top_group_len = len(matched_group_users)
+      #track the current highest number of group members
+      top_group_len = len(matched_group_users)
 
     #Assign self score to output db
     matched_username = GoogleForms.loc[GoogleForms.iloc[:,1]== (UsernameInput)]
-    self_scores_list = matched_username.iloc[:,2:8]
+    self_scores_list = matched_username.iloc[:,2: (number_of_questions + 2)]
     self_scores_total = self_scores_list.values.sum()
     index_num = db[db['login_id'] == (UsernameInput)].index[0]
     output_db.at[index_num,"Self Evaluation Score"] = float(self_scores_total)
     
-    
+    #remember the number of group members for each user input
+    current_group_len = len(matched_group_users)
+    #save the names of matched group members, and remove the user from the member list
+    member_names_db_list = matched_group_users.tolist()
+    member_names_db_list.remove(user_fullname)
 
-    for member_no in range(len(matched_group_users)):
+    for member_no in range(current_group_len):
       if member_no !=0:
         #Assign scores to group members
-        member_score = matched_username.iloc[:,((member_no-1) * (number_of_questions+1) + 9):((member_no-1) * (number_of_questions+1) + (9+number_of_questions))]
+        member_score = matched_username.iloc[:,((member_no-1) * (number_of_questions+1) + (number_of_questions+3)):((member_no-1) * (number_of_questions+1) + ((number_of_questions + 3) +number_of_questions))]
         total_member_score = member_score.values.sum()
 
-        #make this to a list and remove the user from the member list
-        member_names_db_list = matched_group_users.tolist()
-        member_names_db_list.remove(user_fullname)
-        print(member_names_db_list)
-
+        
         #grab the input for username by each column
-        member_names_inputs = matched_username.iloc[:,((member_no-1)*7+8)]
+        member_names_inputs = matched_username.iloc[:,((member_no-1)*(number_of_questions+ 1) + (number_of_questions + 2))]
         member_names_input = member_names_inputs.tolist()[0]
         
         #Detect if number of member input < group members. If true, print error and break out of loop
@@ -149,7 +152,17 @@ def Go():
 
         #insert into output_db if name matches
         matching_member = (process.extract(str(member_names_input),member_names_db_list,limit=1))[0][0]
+        matching_score = (process.extract(str(member_names_input),member_names_db_list,limit=1))[0][1]
         matched_member = output_db.loc[output_db['name']==matching_member]
+
+        #remove from member from member names list after assigning score
+        member_names_db_list.remove(matching_member)
+
+        if matching_score <= int(clicked2.get()):
+          low_match = str("Warning... low matching score ("+str(matching_score)+") for member: "+ str(matching_member))
+          print(low_match)
+          GUIOutput.insert(END,low_match)
+          low_match_TF = TRUE
 
 
         #find the index number of member in output_db
@@ -172,6 +185,19 @@ def Go():
       else:
         continue
 
+    #if there are any low matches (<85 score) append to low_match_list
+    if low_match_TF == TRUE:
+      low_match_list.append(UsernameInput)
+      low_match_count += 1
+      #set low match back to FALSE if previously set as TRUE
+      low_match_TF = FALSE
+
+    #Store list of comment index and comments
+    comment_index_list.append(index_num)
+
+    comment = str(matched_username.iloc[:,-1].values[0])
+    comment_list.append(comment)
+
     #print current username in process      
     ProcessedUser = str("Processed Username: "+UsernameInput)
     print(ProcessedUser)
@@ -183,13 +209,22 @@ def Go():
   score_averages= output_db.mean(axis=1,numeric_only=True)
   output_db["Average Score"] = score_averages
 
-  #Copy comments column from google forms into output db
-  comments_col = GoogleForms.iloc[:,-1]
-  output_db = output_db.join(comments_col)   
+
+  #Assign comments of each row based on both lists
+  output_db["Comments"] = ""
+
+  #Remove comments that do not have values
+  for comment_index in range(len(comment_list)):
+    if comment_list[comment_index] == 'nan':
+      comment_list[comment_index] = ""
+
+
+  for x in range(len(comment_index_list)):
+    output_db.at[comment_index_list[x], "Comments"] = comment_list[x]
 
   # if there are duplicate username inputs raise error at end
   if DuplicateUsername_count > 0:
-    DuplicateUsername_count_str = ("Warning...There are "+str(DuplicateUsername_count)+" duplicate input(s):")
+    DuplicateUsername_count_str = ("Warning...There are "+str(DuplicateUsername_count)+" user(s) with duplicate inputs:")
     print(DuplicateUsername_count_str)
     print(DuplicateUsername_list)
     GUIOutput.insert(END,"")
@@ -205,16 +240,26 @@ def Go():
     GUIOutput.insert(END,memberinputerror_count_str)
     GUIOutput.insert(END,memberinputerror_list)
 
+  if low_match_count > 1:
+    low_match_str = ("Warning...There are "+str(low_match_count)+" user(s) that has matching scores <="+clicked2.get()+"%"+" for members:")
+    print(low_match_str)
+    print(low_match_list)
+    GUIOutput.insert(END,"")
+    GUIOutput.insert(END,low_match_str)
+    GUIOutput.insert(END,low_match_list)    
+
   print("Processing Complete...")
   GUIOutput.insert(END,"")
   GUIOutput.insert(END,"Processing Complete...")
+
   #Output to xlsx in path
   try:
     output_db.to_excel(Output_path+'\\Peer_Eval_output.xlsx')
-  except:
+  except Exception as error:
     print("Error... Unable to output to excel file. Please close Peer_Eval_output.xlsx")
     GUIOutput.delete(0,END)
     GUIOutput.insert(END,"Error... Unable to output to excel file. Please close Peer_Eval_output.xlsx")
+    GUIOutput.insert(END, error)
 
  
 def close_it():
@@ -249,11 +294,11 @@ def browseFiles_Output():
 
 # create root window
 root = Tk()
-#root = tk.ThemedTk()
+
 # root window title and dimension
 root.title("Peer Evaluation Score Calculator")
 # Set geometry (widthxheight)
-root.geometry('650x450')
+root.geometry('670x500')
 root.resizable(False,False)
  
 # all widgets will be here
@@ -333,7 +378,7 @@ ft = tkFont.Font(family='MS Sans',size=10)
 GUIOutput["font"] = ft
 GUIOutput["fg"] = "#333333"
 GUIOutput["justify"] = "left"
-GUIOutput.place(x=30,y=170,width=590,height=230)
+GUIOutput.place(x=30,y=200,width=600,height=250)
 
 scrollbar = Scrollbar(root, orient= 'vertical')
 scrollbar.pack(side= RIGHT, fill= BOTH)
@@ -348,7 +393,7 @@ Go_Button["font"] = ft
 Go_Button["fg"] = "#000000"
 Go_Button["justify"] = "center"
 Go_Button["text"] = "Go"
-Go_Button.place(x=200,y=415,width=70,height=25)
+Go_Button.place(x=200,y=460,width=70,height=25)
 Inputdb_path = Path_db.get(1)
 GoogleForms_path = Path_GF.get(1)
 Go_Button["command"] = Go
@@ -359,10 +404,38 @@ ft = tkFont.Font(family='MS Sans',size=10)
 Exit_Button["font"] = ft
 Exit_Button["fg"] = "#000000"
 Exit_Button["text"] = "Exit"
-Exit_Button.place(x=370,y=415,width=70,height=25)
+Exit_Button.place(x=370,y=460,width=70,height=25)
 Exit_Button["command"] = close_it
 
+Label4 = Label(root,text="Number of Questions:")
+ft = tkFont.Font(family='MS Sans',size=10)
+Label4["font"] = ft
+Label4.place(x=30,y=165)
 
+q_options = range(1,9)
+# datatype of menu text
+clicked1 = StringVar()
+# initial menu text
+clicked1.set( 6 )
+# Create Dropdown menu
+drop1 = OptionMenu( root , clicked1 , *q_options )
+drop1.pack()
+drop1.place(x=170, y=160)
+
+Label5 = Label(root,text="Matching Probability Warning Threshold (%):")
+ft = tkFont.Font(family='MS Sans',size=10)
+Label4["font"] = ft
+Label5.place(x=240,y=165)
+q_options = range(1,9)
+# datatype of menu text
+clicked2 = StringVar()
+# initial menu text
+clicked2.set( 85 )
+# Create Dropdown menu
+matching_options = (80, 85, 90, 95)
+drop2 = OptionMenu( root , clicked2 , *matching_options )
+drop2.pack()
+drop2.place(x=490, y=160)
 
 # Execute Tkinter
 root.mainloop()
