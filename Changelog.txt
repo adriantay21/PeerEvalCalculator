@@ -1,6 +1,22 @@
-Version 1.1 Changes:
+Version 1.1:
 - Minor code improvements
 - Detect and raise error for bad/duplicate input
 - Detect and raise error if user does not evaluate all members
 - Changed input requirements so that user is not required to input their username. Username (email address) is automatically collected. 
 - Added feature to include comments
+
+Version 1.2:
+- Reworded some output messages
+- Detect and raise error for users with low name matching score
+- Added feature to edit number of questions asked in the UI
+- Added feature to edit matching probability threshold in the UI
+- Fixed comments not showing correctly
+- Added warning if there are duplicate member names input
+- Packaged the program in an .exe
+
+Version 1.3:
+- Minor changes to UI
+- Added feature to save output log as text file
+- Added feature to check who has not submitted by saving missing users’ emails as a text file
+- Added cell comments to indicate person who gave the score
+- App icon
