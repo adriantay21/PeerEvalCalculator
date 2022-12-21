@@ -20,6 +20,11 @@ from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 import Levenshtein
 import openpyxl
+import string
+from openpyxl import Workbook
+from openpyxl.comments import Comment
+
+
 pandas.options.mode.chained_assignment = None  # default='warn'
 
 
@@ -33,9 +38,9 @@ def Go():
   Output_path = Path_Output.get(0)
 
   #Open googleforms.csv and save to a variable
-  GoogleForms = pandas.read_csv(GoogleForms_path,header=0)
+  GoogleForms = pandas.read_csv(GoogleForms_path,header=0, encoding='cp1252')
   #Open GoogleForms.csv and only read usernames
-  Username = pandas.read_csv(GoogleForms_path,header=0,usecols=[1])
+  Username = pandas.read_csv(GoogleForms_path,header=0,usecols=[1], encoding='cp1252')
   UsernameList = (Username.values).tolist()
 
   #Open Student Database
@@ -55,6 +60,7 @@ def Go():
   memberinputerror_count = 0
   memberinputerror_list = []
   low_match_count = 0
+  max_score = 0
   low_match_list = []
   low_match_TF = FALSE
   #find the total rows of the spreadsheet
@@ -63,6 +69,10 @@ def Go():
   #make a list to store comments
   comment_index_list = []
   comment_list = []
+  #Store output
+  output_list = []
+  uppercase_abc = list(string.ascii_uppercase)
+  score_comment_list = []
   while row != max_rows:
     #save the username by each row
     UsernameInput = (UsernameList[row])[0]
@@ -70,7 +80,8 @@ def Go():
     print(ProcessingUserOutput)
     GUIOutput.insert(END,"")
     GUIOutput.insert(END,ProcessingUserOutput)
-
+    output_list.append("")
+    output_list.append(ProcessingUserOutput)
     try:
       #return row that matches username
       matched_user_group = db.loc[db['login_id']== (UsernameInput),'group_name']
@@ -82,6 +93,7 @@ def Go():
       InputError = str("Error..."+UsernameInput+" does not exist in the database...")
       print(InputError)
       GUIOutput.insert(END,InputError)
+      output_list.append(InputError)
       break
     
     #add Username input to list to track for duplicates
@@ -90,6 +102,7 @@ def Go():
         DuplicateUsername = str("Error..."+UsernameInput+" has a duplicate input. Ignoring data...")
         print(DuplicateUsername)
         GUIOutput.insert(END,DuplicateUsername)
+        output_list.append(DuplicateUsername)
         DuplicateUsername_list.append(UsernameInput)
         DuplicateUsername_count += 1
         row += 1
@@ -102,9 +115,7 @@ def Go():
     #return all the people with the same group name
     matched_group = db.loc[db['group_name']== group_name]
     matched_group_users = matched_group['name'].values
-    group_name_output = str("Group Name:"+str(group_name))
-    print(group_name_output)
-    GUIOutput.insert(END,group_name_output)
+
     #Create new columns for output db and update with more columns if a group has more members than previous top
     if len(matched_group_users) > top_group_len:
       for columns in range(len(matched_group_users)-top_group_len):
@@ -124,12 +135,22 @@ def Go():
     index_num = db[db['login_id'] == (UsernameInput)].index[0]
     output_db.at[index_num,"Self Evaluation Score"] = float(self_scores_total)
     
+    #remember the max score given to self, used for calculation in computed total score
+    if max_score < self_scores_total:
+      max_score = self_scores_total
+
     #remember the number of group members for each user input
     current_group_len = len(matched_group_users)
     #save the names of matched group members, and remove the user from the member list
     member_names_db_list = matched_group_users.tolist()
     member_names_db_list.remove(user_fullname)
 
+    #Output user group and score
+    user_output = str("Group Name:"+str(group_name)+" | Full_Name:"+str(user_fullname)+ " | Self_score:"+str(self_scores_total))
+    print(user_output)
+    GUIOutput.insert(END, user_output)
+    output_list.append(user_output)
+    
     for member_no in range(current_group_len):
       if member_no !=0:
         #Assign scores to group members
@@ -146,6 +167,7 @@ def Go():
             memberinputerror = str(UsernameInput+ " did not evaluate one or more of their members.")
             print(memberinputerror)
             GUIOutput.insert(END,memberinputerror)
+            output_list.append(memberinputerror)
             memberinputerror_list.append(UsernameInput)
             memberinputerror_count += 1
             break
@@ -162,6 +184,7 @@ def Go():
           low_match = str("Warning... low matching score ("+str(matching_score)+") for member: "+ str(matching_member))
           print(low_match)
           GUIOutput.insert(END,low_match)
+          output_list.append(low_match)
           low_match_TF = TRUE
 
 
@@ -174,6 +197,8 @@ def Go():
           if str(matched_member.iloc[0,column_index]) == "nan":
             #Output member scores
             output_db.iat[member_index,column_index] = total_member_score
+            cell = (uppercase_abc[column_index+1]+str(member_index+2))
+            score_comment_list.append([cell, user_fullname])
             break
           else:
             column_index += 1
@@ -182,6 +207,7 @@ def Go():
         ProcessedMemberOutput = str("Processed Member..."+" Input_name:"+member_names_input+" | Full_name:"+matching_member+" | Score:"+str(total_member_score))       
         print(ProcessedMemberOutput)
         GUIOutput.insert(END,ProcessedMemberOutput)
+        output_list.append(ProcessedMemberOutput)
       else:
         continue
 
@@ -202,6 +228,7 @@ def Go():
     ProcessedUser = str("Processed Username: "+UsernameInput)
     print(ProcessedUser)
     GUIOutput.insert(END,ProcessedUser)
+    output_list.append(ProcessedUser)
     row += 1
     continue
 
@@ -218,7 +245,7 @@ def Go():
     if comment_list[comment_index] == 'nan':
       comment_list[comment_index] = ""
 
-
+  #assign comments based on list of index and comments
   for x in range(len(comment_index_list)):
     output_db.at[comment_index_list[x], "Comments"] = comment_list[x]
 
@@ -230,6 +257,8 @@ def Go():
     GUIOutput.insert(END,"")
     GUIOutput.insert(END,DuplicateUsername_count_str)
     GUIOutput.insert(END,DuplicateUsername_list)
+    output_list.append(DuplicateUsername_count_str)
+    output_list.append(DuplicateUsername_list)
 
   #if a user did not evaluate all members, raise error at end  
   if memberinputerror_count > 0:
@@ -239,34 +268,114 @@ def Go():
     GUIOutput.insert(END,"")
     GUIOutput.insert(END,memberinputerror_count_str)
     GUIOutput.insert(END,memberinputerror_list)
+    output_list.append("")
+    output_list.append(memberinputerror_count_str)
+    output_list.append(memberinputerror_list)
 
+  #if low match count more than one generate error at the end
   if low_match_count > 1:
     low_match_str = ("Warning...There are "+str(low_match_count)+" user(s) that has matching scores <="+clicked2.get()+"%"+" for members:")
     print(low_match_str)
     print(low_match_list)
     GUIOutput.insert(END,"")
     GUIOutput.insert(END,low_match_str)
-    GUIOutput.insert(END,low_match_list)    
+    GUIOutput.insert(END,low_match_list)
+    output_list.append("")    
+    output_list.append(low_match_str)
+    output_list.append(low_match_list)
+
+  #Check if total(max) score input is empty or int, if it is int, compute the average score column based on user input
+  if total_label_box.get() == "":
+    pass
+  else:
+    try:
+      total_score = int(total_label_box.get())
+      output_db["Average Score"] = output_db["Average Score"]/max_score * total_score
+    except:
+      total_score_error = ("Error... Please enter a valid number... Ignoring Max Score input...")
+      GUIOutput.insert(END, total_score_error)
+      output_list.append(total_score_error)
+      output_list.append("")
+      print(total_score_error)
 
   print("Processing Complete...")
   GUIOutput.insert(END,"")
   GUIOutput.insert(END,"Processing Complete...")
+  output_list.append("")
+  output_list.append("Processing Complete...")
 
   #Output to xlsx in path
   try:
     output_db.to_excel(Output_path+'\\Peer_Eval_output.xlsx')
+    output_db_msg = ("Peer_Eval_output.xlsx saved in "+ Output_path)
+    print(output_db_msg)
+    GUIOutput.insert(END,output_db_msg)
+    output_list.append(output_db_msg)
   except Exception as error:
     print("Error... Unable to output to excel file. Please close Peer_Eval_output.xlsx")
+    print(error)
     GUIOutput.delete(0,END)
     GUIOutput.insert(END,"Error... Unable to output to excel file. Please close Peer_Eval_output.xlsx")
     GUIOutput.insert(END, error)
+    output_list.append(error)
 
- 
+  #Generate reviewer name in excel wb as a comment
+  if True:
+    wb = openpyxl.load_workbook(Output_path+'\\Peer_Eval_output.xlsx')
+    ws = wb.active    
+    for x in range(len(score_comment_list)):
+      cell_value = score_comment_list[x][0]
+      name = score_comment_list[x][1]
+      comment_cell = Comment(text= f'Reviewer: {name}', author = f'{name}')
+      ws[f'{cell_value}'].comment = comment_cell
+    wb.save(Output_path+'\\Peer_Eval_output.xlsx')
+
+    
+  #if txt output is selected, save as .txt file
+  if output_txt.get() == TRUE:
+    try:
+      os.chdir(Output_path)
+      txt_output = open(file= 'Output_log.txt',mode= 'w')
+      for line in output_list:
+        txt_output.write(f"{line}\n")
+      txt_output.close
+      txt_output_msg = ("Output_log.txt saved in "+Output_path)
+      print(txt_output_msg)
+      GUIOutput.insert(END,txt_output_msg)
+      output_list.append(txt_output_msg)
+    except Exception as error:
+      print(error)
+      GUIOutput.insert(END,error)
+      output_list.append(error)
+
+  #If non submitted users is selected, save as .txt file
+  if output_missing_users.get() == TRUE:
+    missing_user_list = []
+    missing_user_list = db["login_id"].values.tolist()
+    missing_user_list = list(set(missing_user_list) - set(UsernameList_track))
+    try:
+      os.chdir(Output_path)
+      missing_output = open(file = 'Missing_users.txt', mode = 'w')
+      for line in missing_user_list:
+        missing_output.write(f"{line}\n")
+      missing_output.close
+      missing_output_msg = ("Missing_users.txt saved in "+ Output_path)
+      missing_output_msg2 = ("There were "+ str(len(missing_user_list)) +" student(s) that did not submit a response.")
+      print(missing_output_msg)
+      GUIOutput.insert(END,missing_output_msg)
+      output_list.append(missing_output_msg)
+      print(missing_output_msg2)
+      GUIOutput.insert(END,missing_output_msg2)
+      output_list.append(missing_output_msg2)
+    except Exception as error:
+      print(error)
+      GUIOutput.insert(END,error)
+      output_list.append(error)
+    
 def close_it():
     Path_GF.insert(1,"Quitting Program...")
     Path_GF.delete(0,END)
     quit()
-
 
 def browseFiles_db():
     file_path = filedialog.askopenfilename()
@@ -298,7 +407,7 @@ root = Tk()
 # root window title and dimension
 root.title("Peer Evaluation Score Calculator")
 # Set geometry (widthxheight)
-root.geometry('670x500')
+root.geometry('670x600')
 root.resizable(False,False)
  
 # all widgets will be here
@@ -332,7 +441,7 @@ Path_GF.place(x=30,y=80,width=510,height=20)
 Label3 = Label(root,text="Output folder:")
 ft = tkFont.Font(family='MS Sans',size=10)
 Label3["font"] = ft
-Label3.place(x=30,y=110)
+Label3.place(x=30,y=110) 
 
 Path_Output = Listbox(root)
 Path_Output["borderwidth"] = "1px"
@@ -378,7 +487,7 @@ ft = tkFont.Font(family='MS Sans',size=10)
 GUIOutput["font"] = ft
 GUIOutput["fg"] = "#333333"
 GUIOutput["justify"] = "left"
-GUIOutput.place(x=30,y=200,width=600,height=250)
+GUIOutput.place(x=20,y=270,width=620,height=300)
 
 scrollbar = Scrollbar(root, orient= 'vertical')
 scrollbar.pack(side= RIGHT, fill= BOTH)
@@ -392,20 +501,12 @@ ft = tkFont.Font(family='MS Sans',size=10)
 Go_Button["font"] = ft
 Go_Button["fg"] = "#000000"
 Go_Button["justify"] = "center"
-Go_Button["text"] = "Go"
-Go_Button.place(x=200,y=460,width=70,height=25)
+Go_Button["text"] = "Run"
+Go_Button.place(x=550,y= 205,width=70,height=50)
 Inputdb_path = Path_db.get(1)
 GoogleForms_path = Path_GF.get(1)
 Go_Button["command"] = Go
 
-Exit_Button=Button(root)
-Exit_Button["bg"] = "#f0f0f0"
-ft = tkFont.Font(family='MS Sans',size=10)
-Exit_Button["font"] = ft
-Exit_Button["fg"] = "#000000"
-Exit_Button["text"] = "Exit"
-Exit_Button.place(x=370,y=460,width=70,height=25)
-Exit_Button["command"] = close_it
 
 Label4 = Label(root,text="Number of Questions:")
 ft = tkFont.Font(family='MS Sans',size=10)
@@ -424,8 +525,8 @@ drop1.place(x=170, y=160)
 
 Label5 = Label(root,text="Matching Probability Warning Threshold (%):")
 ft = tkFont.Font(family='MS Sans',size=10)
-Label4["font"] = ft
-Label5.place(x=240,y=165)
+Label5["font"] = ft
+Label5.place(x=250,y=165)
 q_options = range(1,9)
 # datatype of menu text
 clicked2 = StringVar()
@@ -435,7 +536,28 @@ clicked2.set( 85 )
 matching_options = (80, 85, 90, 95)
 drop2 = OptionMenu( root , clicked2 , *matching_options )
 drop2.pack()
-drop2.place(x=490, y=160)
+drop2.place(x=540, y=160)
 
+Label6 = Label(root,text="Additional Outputs:")
+Label6["font"] = ft
+Label6.place(x=30,y=200)
+
+#Checkboxes
+output_txt = IntVar()
+output_missing_users = IntVar()
+
+c1 = Checkbutton(root, text="Output_log.txt",variable= output_txt, onvalue= TRUE, offvalue= FALSE)
+c1.place(x= 30, y= 230)
+c2 = Checkbutton(root, text='Missing_users.txt',variable= output_missing_users, onvalue= TRUE, offvalue= FALSE)
+c2.place(x= 160, y= 230)
+
+#total score calculator
+total_label = Label(root, text = "Max Score:")
+total_label.place( x = 300, y= 230)
+total_label_box = Entry(root)
+total_label_box.place( x = 370, y = 230)
+
+#icon
+root.iconbitmap(r'C:\\Users\\adria\\OneDrive\\Desktop\\PeerEval\\logo.ico')
 # Execute Tkinter
 root.mainloop()
