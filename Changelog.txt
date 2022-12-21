@@ -20,3 +20,4 @@ Version 1.3:
 - Added feature to check who has not submitted by saving missing users’ emails as a text file
 - Added cell comments to indicate person who gave the score
 - App icon
+- Added a “max score” input for user to change the maximum total score for each student input their username. Username (email address) is automatically collected. 
