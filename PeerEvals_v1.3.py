@@ -27,9 +27,9 @@ from openpyxl.comments import Comment
 
 pandas.options.mode.chained_assignment = None  # default='warn'
 
-
+ 
 #Button commands
-def Go():
+def Run():
   
   #Clear Output listbox
   GUIOutput.delete(0,END)
@@ -38,13 +38,21 @@ def Go():
   Output_path = Path_Output.get(0)
 
   #Open googleforms.csv and save to a variable
-  GoogleForms = pandas.read_csv(GoogleForms_path,header=0, encoding='cp1252')
+  try:
+    GoogleForms = pandas.read_csv(GoogleForms_path,header=0, encoding='cp1252')
+    Username = pandas.read_csv(GoogleForms_path,header=0,usecols=[1], encoding='cp1252')
+    UsernameList = (Username.values).tolist()
+  except Exception as e:
+    GUIOutput.insert(END,"Student Responses.csv path is required...")
   #Open GoogleForms.csv and only read usernames
-  Username = pandas.read_csv(GoogleForms_path,header=0,usecols=[1], encoding='cp1252')
-  UsernameList = (Username.values).tolist()
+  
+  
 
-  #Open Student Database
-  db = pandas.read_csv(Inputdb_path,header=0)
+  #Open Student Database (Project Groups)
+  try:
+    db = pandas.read_csv(Inputdb_path,header=0)
+  except:
+    GUIOutput.insert(END,"Project Groups.csv path is required...")
 
   #Create an output database
   output_db = db[['name','login_id']]
@@ -155,6 +163,7 @@ def Go():
       if member_no !=0:
         #Assign scores to group members
         member_score = matched_username.iloc[:,((member_no-1) * (number_of_questions+1) + (number_of_questions+3)):((member_no-1) * (number_of_questions+1) + ((number_of_questions + 3) +number_of_questions))]
+        print(member_score)
         total_member_score = member_score.values.sum()
 
         
@@ -378,23 +387,18 @@ def close_it():
     quit()
 
 def browseFiles_db():
-    file_path = filedialog.askopenfilename()
-    if file_path[-4:] != ".csv":
-      GUIOutput.delete(0,END)
-      GUIOutput.insert(1,"Error...File type invalid. Please select a .csv file.")
-    else:
-      Path_db.delete(0,END)
-      Path_db.insert(1,file_path)
+    file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+    if file_path:
+        Path_db.delete(0, END)
+        Path_db.insert(END, file_path)
+
 
 
 def browseFiles_GF():
-    file_path = filedialog.askopenfilename()
-    if file_path[-4:] != ".csv":
-      GUIOutput.delete(0,END)
-      GUIOutput.insert(1,"Error...File type invalid. Please select a .csv file.")
-    else:
-      Path_GF.delete(0,END)
-      Path_GF.insert(1,file_path)
+    file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+    if file_path:
+        Path_GF.delete(0, END)
+        Path_GF.insert(END, file_path)
 
 def browseFiles_Output():
     file_path = filedialog.askdirectory()
@@ -505,7 +509,7 @@ Go_Button["text"] = "Run"
 Go_Button.place(x=550,y= 205,width=70,height=50)
 Inputdb_path = Path_db.get(1)
 GoogleForms_path = Path_GF.get(1)
-Go_Button["command"] = Go
+Go_Button["command"] = Run
 
 
 Label4 = Label(root,text="Number of Questions:")
@@ -538,7 +542,7 @@ drop2 = OptionMenu( root , clicked2 , *matching_options )
 drop2.pack()
 drop2.place(x=540, y=160)
 
-Label6 = Label(root,text="Additional Outputs:")
+Label6 = Label(root,text="Optional Settings:")
 Label6["font"] = ft
 Label6.place(x=30,y=200)
 
