@@ -557,7 +557,5 @@ total_label.place( x = 300, y= 230)
 total_label_box = Entry(root)
 total_label_box.place( x = 370, y = 230)
 
-#icon
-root.iconbitmap(r'C:\\Users\\adria\\OneDrive\\Desktop\\PeerEval\\logo.ico')
 # Execute Tkinter
 root.mainloop()
